@@ -1,0 +1,396 @@
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Calendar, Clock, Users, Filter, AlertCircle, Check } from 'lucide-react';
+
+ Constants
+const TEAM_MEMBERS = [
+  { id 1, name '石明祥' },
+  { id 2, name '吳柏璇' },
+  { id 3, name '陳冠漢' },
+  { id 4, name '李彥誼' },
+  { id 5, name '徐子勝' },
+  { id 6, name '鍾雨彤' },
+  { id 7, name '黃郁森' },
+];
+
+ Utility functions
+const calculateOvertimeHours = (startTimeStr, endTimeStr) = {
+  const [startHour, startMinute] = startTimeStr.split('').map(Number);
+  const [endHour, endMinute] = endTimeStr.split('').map(Number);
+  
+  let startTimeInMinutes = startHour  60 + startMinute;
+  let endTimeInMinutes = endHour  60 + endMinute;
+  
+   Handle overnight shifts
+  if (endTimeInMinutes  startTimeInMinutes) {
+    endTimeInMinutes += 24  60;
+  }
+  
+  let totalMinutes = endTimeInMinutes - startTimeInMinutes;
+  
+   Subtract lunch break if the shift spans over lunch time
+  if (startTimeInMinutes  13  60 && endTimeInMinutes  12  60) {
+    totalMinutes -= 60;
+  }
+  
+  return totalMinutes  60;
+};
+
+ App Notification Component
+const Notification = ({ message, type }) = {
+  if (!message) return null;
+  
+  return (
+    div className={`mt-3 p-3 rounded flex items-center ${
+      type === 'success'  'bg-green-100 text-green-800'  'bg-red-100 text-red-800'
+    }`}
+      {type === 'success'  
+        Check className=w-5 h-5 mr-2   
+        AlertCircle className=w-5 h-5 mr-2 
+      }
+      p className=text-sm{message}p
+    div
+  );
+};
+
+ Register Form Component
+const RegisterForm = ({ onSubmit, records }) = {
+  const [selectedMemberId, setSelectedMemberId] = useState(1);
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [startTime, setStartTime] = useState('0800');
+  const [endTime, setEndTime] = useState('1800');
+  const [notification, setNotification] = useState({ message '', type '' });
+  
+  const dateStr = useMemo(() = {
+    return currentDate.toISOString().split('T')[0];
+  }, [currentDate]);
+  
+  const selectedMember = useMemo(() = {
+    return TEAM_MEMBERS.find(m = m.id === selectedMemberId);
+  }, [selectedMemberId]);
+  
+  const overtimeHours = useMemo(() = {
+    return calculateOvertimeHours(startTime, endTime);
+  }, [startTime, endTime]);
+  
+  const isDuplicateRecord = useMemo(() = {
+    return records.some(record = 
+      record.memberId === selectedMemberId && record.date === dateStr
+    );
+  }, [records, selectedMemberId, dateStr]);
+  
+  const isValidTime = useMemo(() = {
+    return overtimeHours  0;
+  }, [overtimeHours]);
+  
+  const handleSubmit = useCallback(() = {
+    if (isDuplicateRecord) {
+      setNotification({
+        message '已有此日期的加班記錄，請勿重複登記！',
+        type 'error'
+      });
+      return;
+    }
+    
+    if (!isValidTime) {
+      setNotification({
+        message '今日無加班時數，未登記。',
+        type 'error'
+      });
+      return;
+    }
+    
+    const newRecord = {
+      id Date.now(),
+      memberId selectedMemberId,
+      memberName selectedMember.name,
+      date dateStr,
+      startTime,
+      endTime,
+      overtimeHours,
+    };
+    
+    onSubmit(newRecord);
+    setNotification({
+      message `加班紀錄已提交！${overtimeHours.toFixed(2)}小時加班已登記。`,
+      type 'success'
+    });
+    
+     Reset form fields for the next entry
+    setStartTime('0800');
+    setEndTime('1800');
+  }, [
+    selectedMemberId, 
+    dateStr, 
+    startTime, 
+    endTime, 
+    overtimeHours, 
+    isDuplicateRecord, 
+    isValidTime, 
+    selectedMember, 
+    onSubmit
+  ]);
+  
+  return (
+    div className=space-y-4
+      h2 className=text-lg font-semibold mb-4登記加班h2
+      div className=grid grid-cols-1 mdgrid-cols-2 gap-4
+        div
+          label className=block text-sm font-medium text-gray-700 mb-1選擇組員label
+          select 
+            className=w-full p-2 border rounded
+            value={selectedMemberId}
+            onChange={(e) = setSelectedMemberId(parseInt(e.target.value))}
+          
+            {TEAM_MEMBERS.map(member = (
+              option key={member.id} value={member.id}{member.name}option
+            ))}
+          select
+        div
+        div
+          label className=block text-sm font-medium text-gray-700 mb-1
+            Calendar className=inline-block w-4 h-4 mr-1 
+            選擇日期
+          label
+          input 
+            type=date 
+            className=w-full p-2 border rounded
+            value={dateStr}
+            onChange={(e) = setCurrentDate(new Date(e.target.value))}
+          
+        div
+        div
+          label className=block text-sm font-medium text-gray-700 mb-1
+            Clock className=inline-block w-4 h-4 mr-1 
+            開始時間
+          label
+          input 
+            type=time 
+            className=w-full p-2 border rounded
+            value={startTime}
+            onChange={(e) = setStartTime(e.target.value)}
+          
+        div
+        div
+          label className=block text-sm font-medium text-gray-700 mb-1
+            Clock className=inline-block w-4 h-4 mr-1 
+            結束時間
+          label
+          input 
+            type=time 
+            className=w-full p-2 border rounded
+            value={endTime}
+            onChange={(e) = setEndTime(e.target.value)}
+          
+        div
+      div
+      div className=flex items-center justify-between
+        button 
+          className=bg-blue-600 text-white px-4 py-2 rounded hoverbg-blue-700 transition-colors
+          onClick={handleSubmit}
+        
+          提交
+        button
+        {isValidTime && (
+          div className=text-sm text-gray-600
+            預計加班時數 span className=font-medium{overtimeHours.toFixed(2)} 小時span
+          div
+        )}
+      div
+      Notification message={notification.message} type={notification.type} 
+    div
+  );
+};
+
+ Detailed Records Component
+const DetailedRecords = ({ records }) = {
+  const [filterMemberId, setFilterMemberId] = useState('all');
+  const [sortConfig, setSortConfig] = useState({ key 'date', direction 'desc' });
+  
+  const filteredRecords = useMemo(() = {
+    const filtered = filterMemberId === 'all' 
+       records 
+       records.filter(record = record.memberId === parseInt(filterMemberId));
+    
+    return [...filtered].sort((a, b) = {
+      if (a[sortConfig.key]  b[sortConfig.key]) {
+        return sortConfig.direction === 'asc'  -1  1;
+      }
+      if (a[sortConfig.key]  b[sortConfig.key]) {
+        return sortConfig.direction === 'asc'  1  -1;
+      }
+      return 0;
+    });
+  }, [records, filterMemberId, sortConfig]);
+  
+  const totalHours = useMemo(() = {
+    return filteredRecords.reduce((sum, record) = sum + record.overtimeHours, 0);
+  }, [filteredRecords]);
+  
+  const handleSort = (key) = {
+    setSortConfig(prevConfig = ({
+      key,
+      direction prevConfig.key === key && prevConfig.direction === 'asc'  'desc'  'asc'
+    }));
+  };
+  
+   Function to render sort indicator
+  const renderSortIndicator = (key) = {
+    if (sortConfig.key !== key) return null;
+    return sortConfig.direction === 'asc'  ' ▲'  ' ▼';
+  };
+  
+  if (records.length === 0) {
+    return p className=text-center p-8 text-gray-500尚無加班紀錄p;
+  }
+  
+  return (
+    div className=space-y-4
+      div className=flex flex-wrap items-center justify-between gap-4
+        div className=flex items-center
+          Filter className=w-4 h-4 mr-2 
+          label className=mr-2 font-medium選擇成員label
+          select 
+            className=p-2 border rounded
+            value={filterMemberId}
+            onChange={(e) = setFilterMemberId(e.target.value)}
+          
+            option value=all全部成員option
+            {TEAM_MEMBERS.map(member = (
+              option key={member.id} value={member.id}{member.name}option
+            ))}
+          select
+        div
+        
+        div className=text-sm text-gray-600
+          總加班時數 span className=font-medium{totalHours.toFixed(2)} 小時span
+        div
+      div
+      
+      div className=overflow-x-auto
+        table className=w-full border-collapse
+          thead
+            tr className=bg-gray-100
+              th 
+                className=border p-2 text-left cursor-pointer hoverbg-gray-200
+                onClick={() = handleSort('date')}
+              
+                日期{renderSortIndicator('date')}
+              th
+              th 
+                className=border p-2 text-left cursor-pointer hoverbg-gray-200
+                onClick={() = handleSort('memberName')}
+              
+                姓名{renderSortIndicator('memberName')}
+              th
+              th className=border p-2 text-center開始時間th
+              th className=border p-2 text-center結束時間th
+              th 
+                className=border p-2 text-right cursor-pointer hoverbg-gray-200
+                onClick={() = handleSort('overtimeHours')}
+              
+                加班時數{renderSortIndicator('overtimeHours')}
+              th
+            tr
+          thead
+          tbody
+            {filteredRecords.length  0  (
+              filteredRecords.map((record, index) = (
+                tr 
+                  key={record.id} 
+                  className={`${
+                    index % 2 === 0  bg-white  bg-gray-50
+                  } hoverbg-blue-50 transition-colors`}
+                
+                  td className=border p-2{record.date}td
+                  td className=border p-2{record.memberName}td
+                  td className=border p-2 text-center{record.startTime}td
+                  td className=border p-2 text-center{record.endTime}td
+                  td className=border p-2 text-right font-medium{record.overtimeHours.toFixed(2)} 小時td
+                tr
+              ))
+            )  (
+              tr
+                td colSpan=5 className=border p-4 text-center text-gray-500
+                  無符合條件的加班紀錄
+                td
+              tr
+            )}
+          tbody
+        table
+      div
+    div
+  );
+};
+
+ Main Application Component
+const OvertimeManagementSystem = () = {
+  const [activeTab, setActiveTab] = useState('register');
+  const [records, setRecords] = useState([]);
+  
+   Load records from localStorage only once on component mount
+  useEffect(() = {
+    try {
+      const savedRecords = localStorage.getItem('overtimeRecords');
+      if (savedRecords) {
+        setRecords(JSON.parse(savedRecords));
+      }
+    } catch (error) {
+      console.error('Error loading records from localStorage', error);
+    }
+  }, []);
+  
+   Save records to localStorage whenever they change
+  useEffect(() = {
+    try {
+      localStorage.setItem('overtimeRecords', JSON.stringify(records));
+    } catch (error) {
+      console.error('Error saving records to localStorage', error);
+    }
+  }, [records]);
+  
+  const handleAddRecord = useCallback((newRecord) = {
+    setRecords(prevRecords = [...prevRecords, newRecord]);
+  }, []);
+  
+  return (
+    div className=bg-gray-50 min-h-screen p-4
+      div className=max-w-5xl mx-auto
+        header className=bg-blue-600 text-white p-4 rounded-t-lg shadow
+          h1 className=text-2xl font-bold台灣加班管理系統h1
+          div className=mt-2 flex space-x-1
+            button 
+              className={`px-3 py-1 rounded-t-lg transition-colors ${
+                activeTab === 'register' 
+                   'bg-white text-blue-600 font-medium' 
+                   'bg-blue-500 text-white hoverbg-blue-400'
+              }`}
+              onClick={() = setActiveTab('register')}
+            
+              Clock className=inline-block w-4 h-4 mr-1 
+              登記加班
+            button
+            button 
+              className={`px-3 py-1 rounded-t-lg transition-colors ${
+                activeTab === 'details' 
+                   'bg-white text-blue-600 font-medium' 
+                   'bg-blue-500 text-white hoverbg-blue-400'
+              }`}
+              onClick={() = setActiveTab('details')}
+            
+              Users className=inline-block w-4 h-4 mr-1 
+              詳細記錄
+            button
+          div
+        header
+        
+        div className=bg-white p-6 rounded-b-lg shadow
+          {activeTab === 'register' 
+             RegisterForm onSubmit={handleAddRecord} records={records}  
+             DetailedRecords records={records} }
+        div
+      div
+    div
+  );
+};
+
+export default OvertimeManagementSystem;
